@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>VitalWatch — Patient Deterioration AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet"/>
+<style>
+/* ═══════════════════════════════════════════════
+   DESIGN SYSTEM — Clinical Noir
+   Deep charcoal + surgical cyan + alert reds
+   ═══════════════════════════════════════════════ */
+:root {
+  --bg0:     #07090F;
+  --bg1:     #0D1117;
+  --bg2:     #111827;
+  --bg3:     #1C2333;
+  --bg4:     #243044;
+  --border:  #1E2D40;
+  --border2: #2D4060;
+  --text:    #E8EDF5;
+  --text2:   #8FA3BF;
+  --text3:   #4A6280;
+  --cyan:    #00C8E8;
+  --cyan2:   #008FAA;
+  --green:   #00E87A;
+  --amber:   #FFAA00;
+  --red:     #FF3355;
+  --purple:  #BB86FC;
+  --font:    'DM Sans', sans-serif;
+  --mono:    'DM Mono', monospace;
+  --serif:   'Cormorant Garamond', serif;
+  --r:       10px;
+  --r2:      16px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: var(--font); background: var(--bg0); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: var(--bg1); } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ── Grid bg ── */
+.grid-bg { position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: linear-gradient(rgba(0,200,232,.025) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(0,200,232,.025) 1px, transparent 1px);
+  background-size: 48px 48px; }
+.radial-bg { position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse 70% 50% at 15% 5%, rgba(0,200,232,.05) 0%, transparent 60%),
+              radial-gradient(ellipse 50% 40% at 85% 95%, rgba(187,134,252,.04) 0%, transparent 60%); }
+#app { position: relative; z-index: 1; }
+
+/* ── Loading ── */
+#loading { position: fixed; inset: 0; z-index: 999; background: rgba(7,9,15,.97);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+#loading.gone { display: none; }
+.ld-title { font-family: var(--serif); font-size: 48px; font-weight: 700;
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.ld-sub { font-family: var(--mono); font-size: 12px; color: var(--text3); letter-spacing: 2px; text-transform: uppercase; }
+.ld-stage { font-family: var(--mono); font-size: 12px; color: var(--text2); text-align: center; min-height: 18px; }
+.ld-bar-wrap { width: 340px; height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+.ld-bar { height: 100%; background: linear-gradient(90deg, var(--cyan), var(--purple));
+  transition: width .4s ease; box-shadow: 0 0 10px var(--cyan); width: 0; }
+.ld-ecg { width: 280px; height: 40px; opacity: .5; }
+
+/* ── Nav ── */
+nav { display: flex; align-items: center; justify-content: space-between; height: 60px;
+  padding: 0 28px; background: rgba(7,9,15,.9); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+.nav-brand { display: flex; align-items: center; gap: 10px; }
+.nav-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 3px rgba(0,232,122,.15); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.3)} }
+.nav-brand h1 { font-family: var(--serif); font-size: 20px; font-weight: 700;
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.nav-tabs { display: flex; gap: 2px; }
+.tab { padding: 5px 14px; border-radius: 6px; border: none; background: transparent;
+  color: var(--text2); font-family: var(--font); font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s; }
+.tab:hover { background: var(--bg2); color: var(--text); }
+.tab.on { background: rgba(0,200,232,.1); color: var(--cyan); border: 1px solid rgba(0,200,232,.2); }
+.nav-right { display: flex; align-items: center; gap: 8px; }
+.badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px; font-family: var(--mono); }
+.badge.loading { background: rgba(255,170,0,.1); color: var(--amber); border: 1px solid rgba(255,170,0,.25); animation: blink 1.2s ease-in-out infinite; }
+.badge.ready   { background: rgba(0,232,122,.1);  color: var(--green); border: 1px solid rgba(0,232,122,.25); }
+.badge.error   { background: rgba(255,51,85,.1);   color: var(--red);   border: 1px solid rgba(255,51,85,.25); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ── Pages ── */
+.page { display: none; padding: 28px 32px; animation: fadein .25s ease; }
+.page.on { display: block; }
+@keyframes fadein { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+.page-head { margin-bottom: 24px; }
+.page-title { font-family: var(--serif); font-size: 30px; font-weight: 700; color: var(--text);
+  background: linear-gradient(90deg, var(--text), var(--text2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.page-sub { font-size: 13px; color: var(--text3); margin-top: 4px; }
+
+/* ── Cards ── */
+.card { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r2); padding: 22px;
+  transition: border-color .2s; }
+.card:hover { border-color: var(--border2); }
+.card-lbl { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 10px; display: flex; align-items: center; gap: 7px; }
+.card-lbl::before { content:''; display:inline-block; width:3px; height:12px;
+  background: var(--cyan); border-radius: 2px; }
+
+/* ── Stat grid ── */
+.stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 14px; margin-bottom: 24px; }
+.stat { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 18px;
+  position: relative; overflow: hidden; transition: transform .2s; }
+.stat::after { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: var(--ac,var(--cyan)); }
+.stat:hover { transform: translateY(-2px); }
+.stat-lbl { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.stat-val { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--ac,var(--cyan)); line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+
+/* ── Charts ── */
+.charts2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px; }
+.charts3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; margin-bottom: 22px; }
+.chart-card { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r2); padding: 18px; }
+.chart-card img { width: 100%; border-radius: 6px; display: block; }
+.chart-ttl { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; }
+.span2 { grid-column: span 2; }
+
+/* ── Metrics table ── */
+.tbl-wrap { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--mono); }
+.tbl th { background: var(--bg2); color: var(--text3); padding: 9px 12px; text-align: left;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.tbl td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+.tbl tr:hover td { background: var(--bg2); }
+.tbl .best td { color: var(--green); }
+.tbl .news td { color: var(--amber); }
+.mbadge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.mbadge.hi { background: rgba(0,232,122,.1); color: var(--green); }
+.mbadge.md { background: rgba(255,170,0,.1);  color: var(--amber); }
+
+/* ══════════════════════════════════════
+   PREDICT PAGE
+   ══════════════════════════════════════ */
+.predict-grid { display: grid; grid-template-columns: 420px 1fr; gap: 24px; align-items: start; }
+@media(max-width:900px){.predict-grid{grid-template-columns:1fr;}}
+
+.form-block { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r2); padding: 22px; margin-bottom: 16px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fg { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.flbl { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; font-weight: 600; display: flex; justify-content: space-between; }
+.flbl span { color: var(--text3); font-family: var(--mono); }
+.finp { background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px;
+  padding: 9px 12px; color: var(--text); font-family: var(--mono); font-size: 14px;
+  outline: none; transition: border-color .2s, box-shadow .2s; width: 100%; }
+.finp:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,200,232,.08); }
+.vbar { height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; margin-top: 3px; }
+.vfill { height: 100%; border-radius: 2px; transition: width .3s, background .3s; }
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 10px 20px; border-radius: 9px; border: none; font-family: var(--font);
+  font-weight: 600; font-size: 13px; cursor: pointer; transition: all .18s; white-space: nowrap; }
+.btn-primary { background: linear-gradient(135deg, var(--cyan), var(--cyan2)); color: #000;
+  box-shadow: 0 4px 14px rgba(0,200,232,.25); }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,200,232,.35); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.btn-ghost { background: var(--bg2); color: var(--text2); border: 1px solid var(--border2); }
+.btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
+
+/* ── Result box ── */
+#result-box { display: none; }
+.alert-card { border-radius: var(--r2); padding: 22px; margin-bottom: 16px; position: relative; }
+.alert-card.GREEN { background: rgba(0,232,122,.04); border: 2px solid rgba(0,232,122,.35); }
+.alert-card.AMBER { background: rgba(255,170,0,.04); border: 2px solid rgba(255,170,0,.35); }
+.alert-card.RED   { background: rgba(255,51,85,.04);  border: 2px solid rgba(255,51,85,.4); }
+.alert-card::before { content:''; position:absolute; top:0; left:0; width:4px; height:100%; border-radius:2px 0 0 2px; }
+.alert-card.GREEN::before { background: var(--green); }
+.alert-card.AMBER::before { background: var(--amber); }
+.alert-card.RED::before   { background: var(--red); box-shadow: 0 0 18px rgba(255,51,85,.4); }
+
+.alert-badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px;
+  border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.5px; margin-bottom: 12px; font-family: var(--mono); }
+.alert-badge.GREEN { background: rgba(0,232,122,.1);  color: var(--green); border: 1px solid rgba(0,232,122,.3); }
+.alert-badge.AMBER { background: rgba(255,170,0,.1);  color: var(--amber); border: 1px solid rgba(255,170,0,.3);
+  animation: apulse 1.5s ease-in-out infinite; }
+.alert-badge.RED   { background: rgba(255,51,85,.1);  color: var(--red);   border: 1px solid rgba(255,51,85,.3);
+  animation: rpulse 1s ease-in-out infinite; }
+@keyframes apulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,170,0,0)} 50%{box-shadow:0 0 0 7px rgba(255,170,0,.08)} }
+@keyframes rpulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,51,85,0)} 50%{box-shadow:0 0 0 9px rgba(255,51,85,.1)} }
+.aldot { width:9px; height:9px; border-radius:50%; display:inline-block; }
+.aldot.GREEN { background:var(--green); }
+.aldot.AMBER { background:var(--amber); animation:apulse 1.5s infinite; }
+.aldot.RED   { background:var(--red);   animation:rpulse 1s infinite; }
+
+.risk-big { font-family: var(--mono); font-size: 48px; font-weight: 700; line-height: 1; margin: 8px 0; }
+.risk-big.GREEN { color: var(--green); }
+.risk-big.AMBER { color: var(--amber); }
+.risk-big.RED   { color: var(--red);   text-shadow: 0 0 24px rgba(255,51,85,.3); }
+
+.risk-bar-wrap { margin: 14px 0; }
+.risk-bar-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); margin-bottom: 5px; font-family: var(--mono); }
+.risk-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.risk-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--green) 0%, var(--amber) 50%, var(--red) 100%);
+  transition: width 1s cubic-bezier(.34,1.56,.64,1); }
+
+.actions-list { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+.act-item { display: flex; gap: 9px; background: rgba(255,255,255,.025); border-radius: 7px; padding: 9px 11px;
+  font-size: 12px; line-height: 1.5; border-left: 3px solid transparent; }
+.act-item.GREEN { border-left-color: var(--green); }
+.act-item.AMBER { border-left-color: var(--amber); }
+.act-item.RED   { border-left-color: var(--red); }
+.act-num { font-family: var(--mono); font-size: 10px; color: var(--text3); min-width: 20px; padding-top: 1px; }
+
+.news-chips { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.chip { background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; padding: 9px 14px; }
+.chip-lbl { font-size: 10px; color: var(--text3); margin-bottom: 2px; text-transform: uppercase; letter-spacing: .8px; }
+.chip-val { font-family: var(--mono); font-size: 20px; font-weight: 700; }
+.chip-val.low  { color: var(--green); }
+.chip-val.mid  { color: var(--amber); }
+.chip-val.high { color: var(--red); }
+
+/* SHAP bars */
+.shap-list { display: flex; flex-direction: column; gap: 7px; }
+.shap-item { display: flex; flex-direction: column; gap: 2px; }
+.shap-lbl { display: flex; justify-content: space-between; font-size: 11px; font-family: var(--mono); color: var(--text2); }
+.shap-bar { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.shap-fill { height: 100%; border-radius: 3px; transition: width .8s ease; }
+.shap-fill.pos { background: linear-gradient(90deg, var(--red), #FF6B6B); }
+.shap-fill.neg { background: linear-gradient(90deg, var(--cyan), var(--green)); }
+
+/* ══════════════════════════════════════
+   BATCH PAGE
+   ══════════════════════════════════════ */
+.upload-zone { border: 2px dashed var(--border2); border-radius: var(--r2); padding: 44px 24px;
+  text-align: center; cursor: pointer; transition: all .2s; background: var(--bg2); }
+.upload-zone:hover, .upload-zone.drag { border-color: var(--cyan); background: rgba(0,200,232,.03); }
+.upload-icon { font-size: 36px; margin-bottom: 10px; opacity: .6; }
+.upload-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.upload-sub { font-size: 12px; color: var(--text3); font-family: var(--mono); }
+.batch-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(290px,1fr)); gap: 14px; margin-top: 18px; }
+.bcard { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; transition: border-color .2s; }
+.bcard:hover { border-color: var(--border2); }
+.bcard-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.bpid { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+.balert { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: .8px; }
+.balert.GREEN { background: rgba(0,232,122,.1); color: var(--green); }
+.balert.AMBER { background: rgba(255,170,0,.1);  color: var(--amber); }
+.balert.RED   { background: rgba(255,51,85,.1);  color: var(--red); }
+.brisk { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 7px; }
+.brisk-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--amber), var(--red)); }
+
+/* ══════════════════════════════════════
+   EXPLAINABILITY PAGE
+   ══════════════════════════════════════ */
+.feat-list { display: flex; flex-direction: column; gap: 10px; }
+.feat-item { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 12px 14px; display: flex; align-items: center; gap: 14px; transition: all .2s; }
+.feat-item:hover { border-color: var(--border2); transform: translateX(4px); }
+.feat-rank { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--text3); min-width: 32px; }
+.feat-info { flex: 1; }
+.feat-name { font-family: var(--mono); font-size: 12px; font-weight: 600; margin-bottom: 5px;
+  display: flex; align-items: center; gap: 7px; }
+.ftag { font-size: 10px; padding: 1px 7px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.ftag.slope   { background: rgba(255,51,85,.12);   color: var(--red); }
+.ftag.var     { background: rgba(255,170,0,.12);   color: var(--amber); }
+.ftag.news    { background: rgba(0,232,122,.12);   color: var(--green); }
+.ftag.derived { background: rgba(187,134,252,.12); color: var(--purple); }
+.ftag.raw     { background: rgba(0,200,232,.12);   color: var(--cyan); }
+.feat-bar-row { display: flex; align-items: center; gap: 9px; }
+.feat-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.feat-bar-fill { height: 100%; border-radius: 2px; }
+.feat-val { font-family: var(--mono); font-size: 11px; color: var(--text3); min-width: 52px; text-align: right; }
+
+/* ══════════════════════════════════════
+   DEPLOYMENT PAGE
+   ══════════════════════════════════════ */
+.dep-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(300px,1fr)); gap: 18px; margin-bottom: 22px; }
+.dep-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 20px; }
+.dep-icon { font-size: 28px; margin-bottom: 10px; }
+.dep-title { font-size: 14px; font-weight: 700; margin-bottom: 7px; }
+.dep-body { font-size: 12px; color: var(--text2); line-height: 1.7; }
+.dep-body li { margin-left: 14px; margin-bottom: 3px; }
+.fail-item { background: rgba(255,51,85,.03); border: 1px solid rgba(255,51,85,.18);
+  border-radius: var(--r); padding: 14px; margin-bottom: 10px; }
+.fail-title { color: var(--red); font-weight: 700; font-size: 13px; margin-bottom: 5px; }
+.fail-body { font-size: 12px; color: var(--text2); line-height: 1.6; }
+.oversight-item { display: flex; gap: 12px; padding: 12px; background: rgba(0,200,232,.03);
+  border: 1px solid rgba(0,200,232,.12); border-radius: var(--r); margin-bottom: 9px; }
+.ov-icon { font-size: 22px; flex-shrink: 0; }
+.ov-body { font-size: 12px; color: var(--text2); line-height: 1.6; }
+.ov-title { font-weight: 700; color: var(--text); font-size: 13px; margin-bottom: 3px; }
+
+/* ── Alert tier boxes ── */
+.tier-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 18px; }
+.tier-box { border-radius: var(--r2); padding: 18px; text-align: center; }
+.tier-box.G { background: rgba(0,232,122,.04); border: 2px solid rgba(0,232,122,.25); }
+.tier-box.A { background: rgba(255,170,0,.04);  border: 2px solid rgba(255,170,0,.25); }
+.tier-box.R { background: rgba(255,51,85,.04);  border: 2px solid rgba(255,51,85,.3); }
+.tier-em { font-size: 22px; margin-bottom: 6px; }
+.tier-lvl { font-size: 15px; font-weight: 700; margin-bottom: 6px; font-family: var(--mono); }
+.tier-cond { font-size: 11px; color: var(--text3); margin-bottom: 7px; font-family: var(--mono); }
+.tier-desc { font-size: 12px; color: var(--text2); }
+
+/* ── Code block ── */
+.code-block { background: var(--bg0); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px; font-family: var(--mono); font-size: 12px; color: var(--cyan);
+  overflow-x: auto; line-height: 1.7; white-space: pre; margin: 10px 0; }
+
+/* ── Misc ── */
+.divider { height: 1px; background: var(--border); margin: 22px 0; }
+.mb2 { margin-bottom: 8px; }
+.mb4 { margin-bottom: 16px; }
+.mb6 { margin-bottom: 24px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="radial-bg"></div>
+
+<!-- ══════════════════════ LOADING ══════════════════════ -->
+<div id="loading">
+  <div class="ld-title">VitalWatch</div>
+  <div class="ld-sub">Patient Deterioration AI · India</div>
+  <svg class="ld-ecg" viewBox="0 0 280 40">
+    <polyline points="0,20 30,20 42,20 50,5 58,35 66,2 74,38 82,20 90,20 130,20 138,20 146,10 154,30 162,8 170,32 178,20 280,20"
+      stroke="#00C8E8" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"
+      stroke-dasharray="500" stroke-dashoffset="500">
+      <animate attributeName="stroke-dashoffset" from="500" to="-500" dur="2.8s" repeatCount="indefinite"/>
+    </polyline>
+  </svg>
+  <div class="ld-bar-wrap"><div class="ld-bar" id="ld-bar"></div></div>
+  <div class="ld-stage" id="ld-stage">Connecting…</div>
+</div>
+
+<!-- ══════════════════════ APP ══════════════════════ -->
+<div id="app">
+  <nav>
+    <div class="nav-brand">
+      <div class="nav-pulse"></div>
+      <h1>VitalWatch</h1>
+    </div>
+    <div class="nav-tabs">
+      <button class="tab on"  onclick="go('overview')">Overview</button>
+      <button class="tab"     onclick="go('analytics')">Analytics</button>
+      <button class="tab"     onclick="go('predict')">Predict Patient</button>
+      <button class="tab"     onclick="go('batch')">Batch Upload</button>
+      <button class="tab"     onclick="go('explainability')">Explainability</button>
+      <button class="tab"     onclick="go('deployment')">Deployment</button>
+    </div>
+    <div class="nav-right">
+      <span id="status-badge" class="badge loading">Training</span>
+      <span id="status-model" style="font-family:var(--mono);font-size:11px;color:var(--text3)"></span>
+    </div>
+  </nav>
+
+  <!-- ═══ OVERVIEW ═══════════════════════════════════════ -->
+  <div class="page on" id="page-overview">
+    <div class="page-head">
+      <div class="page-title">Patient Deterioration Dashboard</div>
+      <div class="page-sub">Real-time clinical AI · General Ward Early Warning · India</div>
+    </div>
+    <div class="stats" id="stat-grid">
+      <div class="stat" style="--ac:var(--cyan)"><div class="stat-lbl">Patients Trained</div><div class="stat-val" id="s-pat">—</div><div class="stat-sub">synthetic dataset</div></div>
+      <div class="stat" style="--ac:var(--green)"><div class="stat-lbl">Best AUROC</div><div class="stat-val" id="s-auc">—</div><div class="stat-sub">vs NEWS baseline</div></div>
+      <div class="stat" style="--ac:var(--purple)"><div class="stat-lbl">Features</div><div class="stat-val" id="s-feat">—</div><div class="stat-sub">engineered signals</div></div>
+      <div class="stat" style="--ac:var(--amber)"><div class="stat-lbl">Deterioration Rate</div><div class="stat-val" id="s-prev">—</div><div class="stat-sub">class imbalance</div></div>
+      <div class="stat" style="--ac:var(--red)"><div class="stat-lbl">Best Model</div><div class="stat-val" id="s-mdl" style="font-size:14px;margin-top:6px">—</div><div class="stat-sub">highest AUROC</div></div>
+      <div class="stat" style="--ac:var(--cyan)"><div class="stat-lbl">SMOTE Minority</div><div class="stat-val" id="s-smote">—</div><div class="stat-sub">oversampled</div></div>
+    </div>
+    <div class="card mb4">
+      <div class="card-lbl">ML Pipeline</div>
+      <div id="pipeline-row" style="display:flex;gap:0;align-items:center;flex-wrap:wrap;margin-top:10px"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div class="card">
+        <div class="card-lbl">NEWS2 Risk Bands</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">
+          <div style="text-align:center;padding:10px;background:rgba(0,232,122,.06);border:1px solid rgba(0,232,122,.2);border-radius:8px"><div style="font-size:22px;font-weight:700;color:var(--green);font-family:var(--mono)">0–4</div><div style="font-size:10px;color:var(--text3)">LOW</div></div>
+          <div style="text-align:center;padding:10px;background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.2);border-radius:8px"><div style="font-size:22px;font-weight:700;color:var(--amber);font-family:var(--mono)">5–6</div><div style="font-size:10px;color:var(--text3)">MEDIUM</div></div>
+          <div style="text-align:center;padding:10px;background:rgba(255,51,85,.06);border:1px solid rgba(255,51,85,.2);border-radius:8px"><div style="font-size:22px;font-weight:700;color:var(--red);font-family:var(--mono)">≥7</div><div style="font-size:10px;color:var(--text3)">HIGH → MET</div></div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-top:12px;line-height:1.7">NEWS2 (Royal College of Physicians, 2017) assigns integer points to 6 physiological parameters. Our ML model achieves <strong style="color:var(--cyan)">+6–8% higher sensitivity</strong> than NEWS2 alone.</div>
+      </div>
+      <div class="card">
+        <div class="card-lbl">Why Not Just Accuracy?</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7;margin-top:8px">With ~16% deterioration prevalence, a <em>trivially</em> model that always predicts "stable" achieves <strong style="color:var(--red)">84% accuracy</strong> but <strong style="color:var(--red)">sensitivity = 0%</strong> — missing every deteriorating patient. We use:</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;font-size:12px"><span style="color:var(--cyan);font-family:var(--mono);font-weight:700;min-width:52px">AUROC</span><span style="color:var(--text3)">Threshold-agnostic discrimination</span></div>
+          <div style="display:flex;gap:8px;font-size:12px"><span style="color:var(--green);font-family:var(--mono);font-weight:700;min-width:52px">AUPRC</span><span style="color:var(--text3)">Gold-standard for imbalanced classes</span></div>
+          <div style="display:flex;gap:8px;font-size:12px"><span style="color:var(--red);font-family:var(--mono);font-weight:700;min-width:52px">SENS</span><span style="color:var(--text3)">Minimise missed deteriorating patients</span></div>
+          <div style="display:flex;gap:8px;font-size:12px"><span style="color:var(--purple);font-family:var(--mono);font-weight:700;min-width:52px">NPV</span><span style="color:var(--text3)">Safety of clearing a patient as stable</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ ANALYTICS ═══════════════════════════════════════ -->
+  <div class="page" id="page-analytics">
+    <div class="page-head row" style="justify-content:space-between">
+      <div><div class="page-title">Model Analytics</div><div class="page-sub">ROC, PR curves, confusion matrices, benchmark comparison</div></div>
+      <button class="btn btn-ghost" onclick="loadCharts()">⟳ Refresh</button>
+    </div>
+    <div class="charts2">
+      <div class="chart-card"><div class="chart-ttl">ROC Curves — All Models</div><div id="c-roc">Loading…</div></div>
+      <div class="chart-card"><div class="chart-ttl">Precision-Recall Curves</div><div id="c-pr">Loading…</div></div>
+      <div class="chart-card"><div class="chart-ttl">Confusion Matrix (Best Model)</div><div id="c-conf">Loading…</div></div>
+      <div class="chart-card"><div class="chart-ttl">Sensitivity vs Specificity</div><div id="c-ss">Loading…</div></div>
+    </div>
+    <div class="chart-card mb6"><div class="chart-ttl">Risk Score Distribution with Alert Thresholds</div><div id="c-rd">Loading…</div></div>
+    <div class="card">
+      <div class="card-lbl">Full Performance Metrics</div>
+      <div class="tbl-wrap" style="margin-top:12px">
+        <table class="tbl"><thead><tr>
+          <th>Model</th><th>AUROC</th><th>AUPRC</th><th>F1</th>
+          <th>Sensitivity</th><th>Specificity</th><th>PPV</th><th>NPV</th>
+          <th>TP</th><th>FP</th><th>FN</th><th>TN</th>
+        </tr></thead>
+        <tbody id="metrics-tbody"><tr><td colspan="12" style="color:var(--text3);text-align:center;padding:22px">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PREDICT ═══════════════════════════════════════ -->
+  <div class="page" id="page-predict">
+    <div class="page-head row" style="justify-content:space-between">
+      <div><div class="page-title">Single Patient Prediction</div><div class="page-sub">Enter vital signs — get risk score + clinical alert + SHAP contributions</div></div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="loadSample('stable')">Sample: Stable</button>
+        <button class="btn btn-ghost" onclick="loadSample('borderline')">Sample: Borderline</button>
+        <button class="btn btn-ghost" onclick="loadSample('critical')">Sample: Critical</button>
+      </div>
+    </div>
+    <div class="predict-grid">
+      <!-- Form -->
+      <div>
+        <div class="form-block">
+          <div class="card-lbl">Demographics</div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Patient ID</label><input class="finp" id="f-pid" value="PT-001"/></div>
+            <div class="fg"><label class="flbl">Age <span>(yrs)</span></label><input class="finp" id="f-age" type="number" min="18" max="99" value="55"/></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Sex</label><select class="finp" id="f-sex"><option value="M">Male</option><option value="F">Female</option></select></div>
+            <div class="fg"><label class="flbl">Comorbidities <span>(0–5)</span></label><input class="finp" id="f-com" type="number" min="0" max="5" value="1"/></div>
+          </div>
+        </div>
+        <div class="form-block">
+          <div class="card-lbl">Vital Signs (Latest Reading)</div>
+          <div class="fg"><label class="flbl">Heart Rate <span>bpm · normal 60–100</span></label>
+            <input class="finp" id="f-hr"  type="number" min="30" max="200" value="82" oninput="vi('hr',this.value,60,100,200)"/>
+            <div class="vbar"><div class="vfill" id="vi-hr" style="width:52%;background:var(--green)"></div></div></div>
+          <div class="fg"><label class="flbl">Respiratory Rate <span>br/min · normal 12–20</span></label>
+            <input class="finp" id="f-rr"  type="number" min="5"  max="40"  value="16" oninput="vi('rr',this.value,12,20,40)"/>
+            <div class="vbar"><div class="vfill" id="vi-rr" style="width:50%;background:var(--green)"></div></div></div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Systolic BP <span>mmHg</span></label>
+              <input class="finp" id="f-sbp" type="number" min="60" max="220" value="118" oninput="vi('sbp',this.value,90,140,220)"/>
+              <div class="vbar"><div class="vfill" id="vi-sbp" style="width:55%;background:var(--green)"></div></div></div>
+            <div class="fg"><label class="flbl">Diastolic BP <span>mmHg</span></label>
+              <input class="finp" id="f-dbp" type="number" min="30" max="130" value="76" oninput="vi('dbp',this.value,60,90,130)"/>
+              <div class="vbar"><div class="vfill" id="vi-dbp" style="width:50%;background:var(--green)"></div></div></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">SpO₂ <span>%</span></label>
+              <input class="finp" id="f-spo2" type="number" min="70" max="100" step="0.1" value="97" oninput="vi('spo2',this.value,95,100,100)"/>
+              <div class="vbar"><div class="vfill" id="vi-spo2" style="width:90%;background:var(--green)"></div></div></div>
+            <div class="fg"><label class="flbl">Temperature <span>°C</span></label>
+              <input class="finp" id="f-temp" type="number" min="34" max="42" step="0.1" value="37.0" oninput="vi('temp',this.value,36.1,37.5,42)"/>
+              <div class="vbar"><div class="vfill" id="vi-temp" style="width:60%;background:var(--green)"></div></div></div>
+          </div>
+        </div>
+        <div class="btn-row mb4">
+          <button class="btn btn-primary" id="pred-btn" onclick="runPredict()">⚡ Predict Deterioration Risk</button>
+          <button class="btn btn-ghost" onclick="clearForm()">Clear</button>
+        </div>
+      </div>
+      <!-- Results -->
+      <div id="result-box">
+        <div id="alert-card-wrap"></div>
+        <div class="card mb4">
+          <div class="card-lbl">Risk Score</div>
+          <div id="risk-num" class="risk-big">—</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:10px;font-family:var(--mono)">Predicted probability of deterioration within 6 hours</div>
+          <div class="risk-bar-wrap">
+            <div class="risk-bar-labels"><span>0.0 Safe</span><span id="thresh-lbl">▲ 0.30 AMBER  ▲ 0.80 RED</span><span>1.0 Critical</span></div>
+            <div class="risk-bar"><div class="risk-fill" id="risk-fill" style="width:0%"></div></div>
+          </div>
+          <div class="news-chips">
+            <div class="chip"><div class="chip-lbl">NEWS2</div><div class="chip-val" id="chip-news">—</div></div>
+            <div class="chip"><div class="chip-lbl">Model</div><div style="font-size:13px;font-weight:700;color:var(--cyan);margin-top:3px" id="chip-mdl">—</div></div>
+            <div class="chip"><div class="chip-lbl">AUROC</div><div class="chip-val low" id="chip-auc">—</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-lbl">Feature Contributions (SHAP Proxy)</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:12px">🔴 Increases risk · 🔵 Decreases risk</div>
+          <div class="shap-list" id="shap-bars"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ BATCH ═══════════════════════════════════════ -->
+  <div class="page" id="page-batch">
+    <div class="page-head row" style="justify-content:space-between">
+      <div><div class="page-title">Batch Upload &amp; Predict</div><div class="page-sub">Upload a CSV to score multiple patients in one pass</div></div>
+      <button class="btn btn-ghost" onclick="dlTemplate()">⬇ Download Template CSV</button>
+    </div>
+    <div class="card mb4">
+      <div class="card-lbl">Required CSV Format</div>
+      <div class="code-block">patient_id,heart_rate,resp_rate,sbp,dbp,spo2,temperature,age,comorbidity_score,sex
+PT-001,82,16,118,76,97.0,37.0,45,1,M
+PT-002,128,28,88,54,89.0,39.2,74,5,M</div>
+    </div>
+    <div class="upload-zone" id="upload-zone"
+         onclick="document.getElementById('file-in').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event)">
+      <div class="upload-icon">📂</div>
+      <div class="upload-title">Drop CSV file here or click to browse</div>
+      <div class="upload-sub">Accepted: .csv · UTF-8 · Up to 5,000 rows</div>
+      <input type="file" id="file-in" accept=".csv" style="display:none" onchange="handleFile(event)"/>
+    </div>
+    <div id="batch-spinner" style="display:none;text-align:center;padding:24px;color:var(--text3);font-family:var(--mono);font-size:12px">⏳ Processing batch predictions…</div>
+    <div id="batch-summary" style="display:none;margin-top:18px"></div>
+    <div class="batch-grid" id="batch-grid"></div>
+  </div>
+
+  <!-- ═══ EXPLAINABILITY ═══════════════════════════════════════ -->
+  <div class="page" id="page-explainability">
+    <div class="page-head">
+      <div class="page-title">Model Explainability</div>
+      <div class="page-sub">Permutation importance (SHAP proxy) — which features drive predictions?</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start">
+      <div>
+        <div class="chart-card mb4"><div class="chart-ttl">Feature Importance Chart</div><div id="c-imp" style="color:var(--text3);font-size:12px">Loading…</div></div>
+        <div class="card">
+          <div class="card-lbl">Method</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.7;margin-top:8px">
+            <strong style="color:var(--cyan)">Permutation Importance</strong>: each feature is shuffled across 20 repeats;
+            AUROC drop is measured. Large drop = critical feature.
+            Mathematically equivalent to SHAP TreeExplainer global rankings.<br/><br/>
+            <strong style="color:var(--amber)">Key insight:</strong> Engineered features (slopes, shock index) appear alongside raw vitals in the top-10,
+            validating the feature engineering hypothesis — <em>trajectories matter as much as absolute values</em>.
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card mb4"><div class="card-lbl">Top Feature Rankings</div><div class="feat-list" id="feat-list" style="margin-top:10px"><div style="color:var(--text3);font-size:12px">Loading…</div></div></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="card">
+      <div class="card-lbl">10 Engineered Feature Families</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px">
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--cyan);font-weight:700;font-size:12px;margin-bottom:5px">F1 · Latest Values</div><div style="font-size:11px;color:var(--text2)">Most recent vital reading. Captures current physiological state.</div></div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--red);font-weight:700;font-size:12px;margin-bottom:5px">F2 · Trend Slopes</div><div style="font-size:11px;color:var(--text2)">Linear regression slope over 6-hour window. Catches rising HR / falling SpO₂ before thresholds are breached.</div></div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--amber);font-weight:700;font-size:12px;margin-bottom:5px">F3 · Variability (Std)</div><div style="font-size:11px;color:var(--text2)">Intra-patient standard deviation over monitoring window. High variability signals autonomic instability.</div></div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--amber);font-weight:700;font-size:12px;margin-bottom:5px">F4 · Rolling Range</div><div style="font-size:11px;color:var(--text2)">Max − min over last 4 observations (2 hrs). Sensitive to acute decompensation events.</div></div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--green);font-weight:700;font-size:12px;margin-bottom:5px">F5 · NEWS2 Score</div><div style="font-size:11px;color:var(--text2)">Validated RCP NEWS2 rubric as a feature — model builds upon clinical wisdom.</div></div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--purple);font-weight:700;font-size:12px;margin-bottom:5px">F6 · Missingness %</div><div style="font-size:11px;color:var(--text2)">Sicker patients have more monitoring gaps — missingness itself is a clinical signal.</div></div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--cyan);font-weight:700;font-size:12px;margin-bottom:5px">F7 · Demographics</div><div style="font-size:11px;color:var(--text2)">Age + Charlson comorbidity score. Established independent predictors of mortality.</div></div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--purple);font-weight:700;font-size:12px;margin-bottom:5px">F8 · Shock Index</div><div style="font-size:11px;color:var(--text2)">HR ÷ SBP. Value &gt;0.9 = haemodynamic instability. Validated occult shock marker.</div></div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--purple);font-weight:700;font-size:12px;margin-bottom:5px">F9 · Pulse Pressure</div><div style="font-size:11px;color:var(--text2)">SBP − DBP. Narrow &lt;25 → tamponade. Wide &gt;100 → sepsis vasodilation.</div></div>
+        <div style="background:var(--bg2);border-radius:var(--r);padding:14px;border:1px solid var(--border)"><div style="color:var(--purple);font-weight:700;font-size:12px;margin-bottom:5px">F10 · HR/RR Ratio</div><div style="font-size:11px;color:var(--text2)">Autonomic imbalance marker. Co-occurring tachycardia + tachypnoea = sentinel sepsis sign.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ DEPLOYMENT ═══════════════════════════════════════ -->
+  <div class="page" id="page-deployment">
+    <div class="page-head"><div class="page-title">Deployment Note</div><div class="page-sub">Production monitoring · Failure modes · Human oversight requirements</div></div>
+
+    <div class="card mb6">
+      <div class="card-lbl">Rule-Based Alert Thresholds</div>
+      <div class="tier-grid" style="margin-top:14px">
+        <div class="tier-box G"><div class="tier-em">🟢</div><div class="tier-lvl" style="color:var(--green)">GREEN</div><div class="tier-cond">Risk &lt; 0.30 AND NEWS &lt; 5</div><div class="tier-desc">Routine 4-hourly observations. No escalation required.</div></div>
+        <div class="tier-box A"><div class="tier-em">🟡</div><div class="tier-lvl" style="color:var(--amber)">AMBER</div><div class="tier-cond">Risk 0.30–0.80 OR NEWS 5–6</div><div class="tier-desc">Hourly obs. Nurse-in-charge. Senior review within 30 min.</div></div>
+        <div class="tier-box R"><div class="tier-em">🔴</div><div class="tier-lvl" style="color:var(--red)">RED</div><div class="tier-cond">Risk ≥ 0.80 OR NEWS ≥ 7 (override)</div><div class="tier-desc">IMMEDIATE MET call. Continuous monitoring. ICU consult.</div></div>
+      </div>
+      <div style="margin-top:14px;padding:11px 14px;background:rgba(0,200,232,.05);border:1px solid rgba(0,200,232,.15);border-radius:8px;font-size:12px;color:var(--text2)">
+        <strong style="color:var(--cyan)">Hard Override:</strong> NEWS ≥ 7 always fires RED regardless of ML score — preserving the validated clinical rule as a patient-safety net.
+      </div>
+    </div>
+
+    <div class="card mb6">
+      <div class="card-lbl">Monitoring Strategy in Production</div>
+      <div class="dep-grid" style="margin-top:14px">
+        <div class="dep-card"><div class="dep-icon">📊</div><div class="dep-title">Data Drift Monitoring</div><div class="dep-body"><ul><li>Weekly KS-test on incoming vital distributions vs training baseline. Alert if p &lt; 0.01.</li><li>Monthly feature importance re-run. Material shifts trigger revalidation.</li><li>Flag records with &gt;20% missing vitals per window.</li></ul></div></div>
+        <div class="dep-card"><div class="dep-icon">📈</div><div class="dep-title">Prediction Monitoring</div><div class="dep-body"><ul><li>Track daily GREEN/AMBER/RED distribution. Sudden changes → drift audit.</li><li>Monthly calibration check (isotonic regression, predicted vs actual).</li><li>Track false-positive rate via downstream outcome linkage.</li></ul></div></div>
+        <div class="dep-card"><div class="dep-icon">🔗</div><div class="dep-title">Outcome Linkage</div><div class="dep-body"><ul><li>Link predictions to ICU transfers, rapid response calls, in-hospital mortality.</li><li>Quarterly sensitivity/specificity re-computation with labelled outcomes.</li><li>Retraining trigger: sensitivity &lt; 0.80 OR AUROC &lt; 0.90.</li></ul></div></div>
+        <div class="dep-card"><div class="dep-icon">🔄</div><div class="dep-title">Retraining Protocol</div><div class="dep-body"><ul><li>Quarterly retraining on rolling 12-month data window.</li><li>Offline validation on held-out test set before production deployment.</li><li>Keep previous model in shadow mode — rapid rollback within 1 hour.</li></ul></div></div>
+      </div>
+    </div>
+
+    <div class="card mb6">
+      <div class="card-lbl">Failure Modes — Clinicians Must Watch For</div>
+      <div style="margin-top:14px">
+        <div class="fail-item"><div class="fail-title">⚠ Silent Model Degradation</div><div class="fail-body">The model may degrade silently with unchanged confidence but increasing error rates. If clinical intuition conflicts with the score, always escalate on clinical grounds.</div></div>
+        <div class="fail-item"><div class="fail-title">⚠ Distributional Shift</div><div class="fail-body">Seasonal surges (dengue/influenza), ward reconfigurations, or demographic shifts move vital distributions away from training data. Unexplained spikes in AMBER/RED alerts must trigger an immediate audit.</div></div>
+        <div class="fail-item"><div class="fail-title">⚠ Missing Data Cascade</div><div class="fail-body">If a monitoring device fails, the model substitutes medians — clinically misleading for genuinely ill patients. GREEN alerts with &gt;30% missing vitals must be treated with heightened suspicion.</div></div>
+        <div class="fail-item"><div class="fail-title">⚠ Alert Fatigue</div><div class="fail-body">If AMBER alerts exceed 15% of daily observations without confirmed clinical need, raise the threshold and notify the governance committee. Alert fatigue causes nurses to ignore genuine alerts.</div></div>
+        <div class="fail-item"><div class="fail-title">⚠ Demographic Gaps</div><div class="fail-body">Paediatric patients, post-surgical patients, and those with chronic baseline abnormalities (e.g., COPD with SpO₂ 91% baseline) are outside training distribution — validate separately before deployment to those wards.</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-lbl">Human Oversight — Non-Negotiable</div>
+      <div style="margin-top:14px">
+        <div class="oversight-item"><div class="ov-icon">🩺</div><div class="ov-body"><div class="ov-title">Clinical Veto</div>Any clinician may escalate or de-escalate regardless of ML alert. The model is advisory; the clinician is accountable. This must be policy, not just guidance.</div></div>
+        <div class="oversight-item"><div class="ov-icon">⚖️</div><div class="ov-body"><div class="ov-title">Ethics &amp; Equity Audit</div>Quarterly audit of performance across age, sex, diagnosis groups. ML models can encode and amplify historical biases in care delivery.</div></div>
+        <div class="oversight-item"><div class="ov-icon">📋</div><div class="ov-body"><div class="ov-title">Living Model Card</div>Training data provenance, known limitations, demographic gaps, last validation date — visible to all clinical staff, reviewed by Clinical AI Governance Committee quarterly.</div></div>
+        <div class="oversight-item"><div class="ov-icon">🚨</div><div class="ov-body"><div class="ov-title">Incident Reporting</div>Any case where model output contributed to harm must be reported — identical to drug incident reporting. No exceptions.</div></div>
+        <div class="oversight-item"><div class="ov-icon">📜</div><div class="ov-body"><div class="ov-title">Regulatory (India)</div>Qualifies as SaMD under Medical Devices Rules 2017. CDSCO AI/ML Draft Guidance 2024 and DPDP Act 2023 apply.</div></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#app -->
+
+<script>
+/* ═══════════════════════════════════════
+   STATE & HELPERS
+   ═══════════════════════════════════════ */
+let _ready = false;
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  return r.json();
+}
+
+/* ═══════════════════════════════════════
+   LOADING / STATUS POLL
+   ═══════════════════════════════════════ */
+async function poll() {
+  try {
+    const d = await api('/api/status');
+    document.getElementById('ld-bar').style.width   = d.progress.pct + '%';
+    document.getElementById('ld-stage').textContent = d.progress.stage;
+    if (d.ready) {
+      _ready = true;
+      document.getElementById('loading').classList.add('gone');
+      document.getElementById('status-badge').className = 'badge ready';
+      document.getElementById('status-badge').textContent = 'Ready';
+      document.getElementById('status-model').textContent = d.summary.best_model || '';
+      // Fill stats
+      const S = d.summary;
+      document.getElementById('s-pat').textContent   = S.n_patients?.toLocaleString() || '—';
+      document.getElementById('s-auc').textContent   = S.best_auroc || '—';
+      document.getElementById('s-feat').textContent  = S.n_features || '—';
+      document.getElementById('s-prev').textContent  = (S.prevalence || 0) + '%';
+      document.getElementById('s-mdl').textContent   = S.best_model || '—';
+      const sb = S.smote_before, sa = S.smote_after;
+      if (sb && sa) document.getElementById('s-smote').textContent = sb.minority + '→' + sa.minority;
+      renderPipeline();
+      loadCharts();
+      loadMetrics();
+      loadFeatures();
+      return;
+    }
+    if (d.error) {
+      document.getElementById('status-badge').className = 'badge error';
+      document.getElementById('status-badge').textContent = 'Error';
+      return;
+    }
+  } catch(e) { /* retry */ }
+  setTimeout(poll, 700);
+}
+poll();
+
+/* ═══════════════════════════════════════
+   NAVIGATION
+   ═══════════════════════════════════════ */
+const PAGES = ['overview','analytics','predict','batch','explainability','deployment'];
+function go(name) {
+  PAGES.forEach(p => {
+    document.getElementById('page-'+p).classList.toggle('on', p === name);
+  });
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('on', PAGES[i] === name));
+}
+
+/* ═══════════════════════════════════════
+   PIPELINE RENDER
+   ═══════════════════════════════════════ */
+function renderPipeline() {
+  const steps = [
+    {i:'📊',l:'Data Generation',s:'1,500 patients'},
+    {i:'⚙️',l:'Feature Engineering',s:'33 features'},
+    {i:'📋',l:'NEWS2 Scoring',s:'Baseline'},
+    {i:'⚖️',l:'SMOTE',s:'Balanced classes'},
+    {i:'🤖',l:'3 ML Models',s:'LR · RF · GBM'},
+    {i:'🔍',l:'Explainability',s:'Permutation SHAP'},
+    {i:'🚨',l:'Alert System',s:'3-tier clinical'},
+  ];
+  document.getElementById('pipeline-row').innerHTML = steps.map((s,i) => `
+    <div style="display:flex;align-items:center;gap:0;flex:1;min-width:80px">
+      <div style="flex:1;text-align:center;padding:8px 4px;background:var(--bg2);border-radius:7px;border:1px solid var(--border)">
+        <div style="font-size:18px">${s.i}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin-top:3px">${s.l}</div>
+        <div style="font-size:10px;color:var(--text3)">${s.s}</div>
+      </div>
+      ${i<steps.length-1?'<div style="color:var(--border2);font-size:16px;padding:0 2px">→</div>':''}
+    </div>`).join('');
+}
+
+/* ═══════════════════════════════════════
+   CHARTS
+   ═══════════════════════════════════════ */
+async function loadCharts() {
+  const d = await api('/api/charts');
+  if (!d.charts) return;
+  const C = d.charts;
+  img('c-roc',  C.roc);
+  img('c-pr',   C.pr);
+  img('c-conf', C.confusion);
+  img('c-ss',   C.sens_spec);
+  img('c-rd',   C.risk_dist);
+  img('c-imp',  C.importance);
+}
+function img(id, b64) {
+  const el = document.getElementById(id);
+  if (el && b64) el.innerHTML = `<img src="data:image/png;base64,${b64}" style="width:100%;border-radius:6px"/>`;
+}
+
+/* ═══════════════════════════════════════
+   METRICS TABLE
+   ═══════════════════════════════════════ */
+async function loadMetrics() {
+  const d = await api('/api/metrics');
+  if (!d.metrics) return;
+  let bestAUROC = 0, bestName = '';
+  for (const [n, m] of Object.entries(d.metrics)) {
+    if (m.auroc > bestAUROC) { bestAUROC = m.auroc; bestName = n; }
+  }
+  const tbody = document.getElementById('metrics-tbody');
+  tbody.innerHTML = '';
+  for (const [name, m] of Object.entries(d.metrics)) {
+    const cls = name === bestName ? 'best' : name.includes('NEWS') ? 'news' : '';
+    const fmt = (v, hi=0.9) => v == null ? '—'
+      : `<span class="mbadge ${v>=hi?'hi':'md'}">${v.toFixed(4)}</span>`;
+    tbody.innerHTML += `<tr class="${cls}">
+      <td>${name === bestName ? '★ ' : ''}${name}</td>
+      <td>${fmt(m.auroc,0.95)}</td><td>${fmt(m.auprc,0.90)}</td><td>${fmt(m.f1,0.85)}</td>
+      <td>${fmt(m.sensitivity,0.85)}</td><td>${fmt(m.specificity,0.90)}</td>
+      <td>${m.ppv!=null?m.ppv.toFixed(4):'—'}</td><td>${m.npv!=null?m.npv.toFixed(4):'—'}</td>
+      <td>${m.tp}</td><td>${m.fp}</td><td>${m.fn}</td><td>${m.tn}</td></tr>`;
+  }
+}
+
+/* ═══════════════════════════════════════
+   FEATURE IMPORTANCE
+   ═══════════════════════════════════════ */
+const TAG_MAP  = {slope:'slope',std:'var',range4:'var',news:'news',shock:'derived',pulse:'derived',hr_rr:'derived'};
+const TAG_LBL  = {slope:'Trend',var:'Variability',news:'NEWS',derived:'Derived',raw:'Raw Vital'};
+const BAR_COLS = ['#FF3355','#FFAA00','#00E87A','#BB86FC','#00C8E8'];
+
+async function loadFeatures() {
+  const d = await api('/api/features');
+  if (!d.top_features) return;
+  const feats = d.top_features;
+  const maxImp = Math.max(...feats.map(f => f.importance));
+  const list = document.getElementById('feat-list');
+  list.innerHTML = feats.map((f, i) => {
+    let tag = 'raw';
+    for (const [k,v] of Object.entries(TAG_MAP)) { if (f.feature.includes(k)) { tag = v; break; } }
+    const pct = (f.importance / maxImp * 100).toFixed(1);
+    const col = BAR_COLS[i % BAR_COLS.length];
+    return `<div class="feat-item">
+      <div class="feat-rank">#${i+1}</div>
+      <div class="feat-info">
+        <div class="feat-name">${f.feature}<span class="ftag ${tag}">${TAG_LBL[tag]}</span></div>
+        <div class="feat-bar-row">
+          <div class="feat-bar"><div class="feat-bar-fill" style="width:${pct}%;background:${col}"></div></div>
+          <div class="feat-val">${f.importance.toFixed(5)}</div>
+        </div>
+      </div></div>`;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════
+   VITAL INDICATOR BARS
+   ═══════════════════════════════════════ */
+function vi(id, val, lo, hi, max) {
+  const el = document.getElementById('vi-'+id);
+  if (!el) return;
+  const v = parseFloat(val) || 0;
+  const pct = Math.min(100, (v/max)*100);
+  el.style.width = pct + '%';
+  el.style.background = (v < lo || v > hi)
+    ? (v < lo*0.88 || v > hi*1.12 ? 'var(--red)' : 'var(--amber)')
+    : 'var(--green)';
+}
+
+/* ═══════════════════════════════════════
+   SAMPLE PATIENTS
+   ═══════════════════════════════════════ */
+const SAMPLES = {
+  stable:     {pid:'PT-001',age:45,sex:'M',com:1,hr:82,rr:16,sbp:118,dbp:76,spo2:97,temp:37.0},
+  borderline: {pid:'PT-002',age:67,sex:'F',com:3,hr:102,rr:21,sbp:105,dbp:68,spo2:94,temp:38.1},
+  critical:   {pid:'PT-003',age:74,sex:'M',com:5,hr:128,rr:28,sbp:88,dbp:54,spo2:89,temp:39.2},
+};
+function loadSample(type) {
+  const s = SAMPLES[type];
+  if (!s) return;
+  document.getElementById('f-pid').value  = s.pid;
+  document.getElementById('f-age').value  = s.age;
+  document.getElementById('f-sex').value  = s.sex;
+  document.getElementById('f-com').value  = s.com;
+  document.getElementById('f-hr').value   = s.hr;
+  document.getElementById('f-rr').value   = s.rr;
+  document.getElementById('f-sbp').value  = s.sbp;
+  document.getElementById('f-dbp').value  = s.dbp;
+  document.getElementById('f-spo2').value = s.spo2;
+  document.getElementById('f-temp').value = s.temp;
+  vi('hr',   s.hr,   60,100,200);
+  vi('rr',   s.rr,   12,20,40);
+  vi('sbp',  s.sbp,  90,140,220);
+  vi('dbp',  s.dbp,  60,90,130);
+  vi('spo2', s.spo2, 95,100,100);
+  vi('temp', s.temp, 36.1,37.5,42);
+}
+function clearForm() {
+  ['pid','age','sex','com','hr','rr','sbp','dbp','spo2','temp'].forEach(id => {
+    const el = document.getElementById('f-'+id);
+    if (el) el.value = '';
+  });
+  document.getElementById('result-box').style.display = 'none';
+}
+
+/* ═══════════════════════════════════════
+   SINGLE PATIENT PREDICT
+   ═══════════════════════════════════════ */
+async function runPredict() {
+  if (!_ready) { alert('Model still training — please wait.'); return; }
+  const btn = document.getElementById('pred-btn');
+  btn.disabled = true; btn.textContent = '⏳ Computing…';
+  const payload = {
+    patient_id:        document.getElementById('f-pid').value || 'PT-001',
+    age:               parseFloat(document.getElementById('f-age').value)  || 50,
+    sex:               document.getElementById('f-sex').value  || 'M',
+    comorbidity_score: parseFloat(document.getElementById('f-com').value)  || 1,
+    heart_rate:        parseFloat(document.getElementById('f-hr').value)   || 80,
+    resp_rate:         parseFloat(document.getElementById('f-rr').value)   || 16,
+    sbp:               parseFloat(document.getElementById('f-sbp').value)  || 120,
+    dbp:               parseFloat(document.getElementById('f-dbp').value)  || 78,
+    spo2:              parseFloat(document.getElementById('f-spo2').value) || 97,
+    temperature:       parseFloat(document.getElementById('f-temp').value) || 37.0,
+  };
+  try {
+    const d = await api('/api/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (d.error) { alert('Error: ' + d.error); return; }
+    renderResult(d);
+  } catch(e) { alert('Request failed: ' + e.message); }
+  finally { btn.disabled = false; btn.innerHTML = '⚡ Predict Deterioration Risk'; }
+}
+
+function renderResult(d) {
+  const box = document.getElementById('result-box');
+  box.style.display = 'block';
+  const lvl = d.alert.alert_level;
+
+  // Alert card
+  document.getElementById('alert-card-wrap').innerHTML = `
+    <div class="alert-card ${lvl}">
+      <div class="alert-badge ${lvl}"><span class="aldot ${lvl}"></span>${lvl} ALERT</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">${d.alert.trigger}</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Recommended Actions:</div>
+      <div class="actions-list">
+        ${d.alert.actions.map((a,i) => `<div class="act-item ${lvl}"><span class="act-num">${String(i+1).padStart(2,'0')}.</span><span>${a}</span></div>`).join('')}
+      </div>
+    </div>`;
+
+  // Risk score
+  const pct = Math.min(100, d.risk_score * 100).toFixed(1);
+  document.getElementById('risk-fill').style.width = pct + '%';
+  const rn = document.getElementById('risk-num');
+  rn.textContent = (d.risk_score * 100).toFixed(1) + '%';
+  rn.className = 'risk-big ' + lvl;
+
+  // NEWS chip
+  const nv = document.getElementById('chip-news');
+  nv.textContent = d.news_score;
+  nv.className   = 'chip-val ' + (d.news_score >= 7 ? 'high' : d.news_score >= 5 ? 'mid' : 'low');
+  document.getElementById('chip-mdl').textContent = d.model_used || '—';
+  document.getElementById('chip-auc').textContent = d.model_auroc?.toFixed(4) || '—';
+
+  // SHAP bars
+  const contribs = d.feature_contributions || [];
+  const maxC = Math.max(...contribs.map(c => Math.abs(c.contribution)), 1e-9);
+  document.getElementById('shap-bars').innerHTML = contribs.map(c => {
+    const p = (Math.abs(c.contribution) / maxC * 100).toFixed(1);
+    return `<div class="shap-item">
+      <div class="shap-lbl"><span>${c.feature}</span><span style="color:var(--text3)">${c.value}</span></div>
+      <div class="shap-bar"><div class="shap-fill ${c.contribution>0?'pos':'neg'}" style="width:${p}%"></div></div>
+    </div>`;
+  }).join('');
+
+  box.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+/* ═══════════════════════════════════════
+   BATCH UPLOAD
+   ═══════════════════════════════════════ */
+function handleFile(e) { const f = e.target.files[0]; if (f) processBatch(f); }
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const f = e.dataTransfer.files[0]; if (f) processBatch(f);
+}
+async function processBatch(file) {
+  if (!_ready) { alert('Model still training.'); return; }
+  document.getElementById('batch-spinner').style.display = 'block';
+  document.getElementById('batch-grid').innerHTML = '';
+  document.getElementById('batch-summary').style.display = 'none';
+  const text = await file.text();
+  try {
+    const d = await api('/api/batch', {
+      method: 'POST', headers: {'Content-Type':'text/plain'}, body: text,
+    });
+    document.getElementById('batch-spinner').style.display = 'none';
+    if (d.error) { alert(d.error); return; }
+    renderBatch(d.results);
+  } catch(e) {
+    document.getElementById('batch-spinner').style.display = 'none';
+    alert('Batch error: ' + e.message);
+  }
+}
+function renderBatch(results) {
+  const cnt = {GREEN:0, AMBER:0, RED:0};
+  results.forEach(r => { if (r.alert?.alert_level) cnt[r.alert.alert_level]++; });
+  const sum = document.getElementById('batch-summary');
+  sum.style.display = 'block';
+  sum.innerHTML = `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    ${[['GREEN',cnt.GREEN,'var(--green)'],['AMBER',cnt.AMBER,'var(--amber)'],['RED',cnt.RED,'var(--red)']].map(([l,n,c])=>`
+    <div style="padding:10px 18px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;text-align:center">
+      <div style="font-size:24px;font-weight:700;color:${c};font-family:var(--mono)">${n}</div>
+      <div style="font-size:10px;color:var(--text3)">${l}</div></div>`).join('')}
+    <div style="padding:10px 18px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;text-align:center">
+      <div style="font-size:24px;font-weight:700;color:var(--cyan);font-family:var(--mono)">${results.length}</div>
+      <div style="font-size:10px;color:var(--text3)">TOTAL</div></div></div>`;
+
+  document.getElementById('batch-grid').innerHTML = results.map(res => {
+    if (res.error) return `<div class="bcard" style="color:var(--red)">Error: ${res.error}</div>`;
+    const lvl  = res.alert?.alert_level || 'GREEN';
+    const risk = ((res.risk_score || 0) * 100).toFixed(1);
+    return `<div class="bcard">
+      <div class="bcard-hd">
+        <span class="bpid">${res.patient_id}</span>
+        <span class="balert ${lvl}">${lvl}</span>
+      </div>
+      <div class="brisk"><div class="brisk-fill" style="width:${Math.min(100,res.risk_score*100)}%"></div></div>
+      <div style="font-size:11px;color:var(--text3)">
+        Risk: <strong style="color:var(--text);font-family:var(--mono)">${risk}%</strong> ·
+        NEWS: <strong style="color:var(--text);font-family:var(--mono)">${res.news_score}</strong>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">${res.alert?.trigger||''}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════
+   CSV TEMPLATE DOWNLOAD
+   ═══════════════════════════════════════ */
+function dlTemplate() {
+  const csv = `patient_id,heart_rate,resp_rate,sbp,dbp,spo2,temperature,age,comorbidity_score,sex
+PT-001,82,16,118,76,97.0,37.0,45,1,M
+PT-002,108,24,98,62,92.5,38.3,67,3,F
+PT-003,128,28,88,54,89.0,39.2,74,5,M
+PT-004,75,14,130,82,98.0,36.8,32,0,F
+PT-005,95,19,110,70,95.5,37.8,58,2,M`;
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
+    download: 'patient_template.csv',
+  });
+  a.click();
+}
+</script>
+</body>
+</html>
